@@ -1,0 +1,49 @@
+{
+  "name": "opencode-wx-clawbot-notifier",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "description": "OpenCode plugin: send a WeChat (ClawBot) notification when a question/confirm tool waits too long for a human answer",
+  "keywords": [
+    "opencode",
+    "plugin",
+    "wechat",
+    "clawbot",
+    "notification",
+    "question"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --emitDeclarationOnly && bun scripts/build.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "format": "bunx prettier --write src tests scripts"
+  },
+  "peerDependencies": {
+    "@opencode/plugin": "^2.1.1"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "^2.1.1",
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.5.0"
+  }
+}
