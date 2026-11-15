@@ -21,7 +21,7 @@ question 工具开始执行（等待用户回答）
 ## 安装
 
 ```sh
-opencode plugin add opencode-wx-clawbot-notifier --global
+opencode plugin add @laxture/opencode-wx-clawbot-notifier --global
 ```
 
 或在 `opencode.jsonc` 中配置：
@@ -29,7 +29,7 @@ opencode plugin add opencode-wx-clawbot-notifier --global
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["opencode-wx-clawbot-notifier"]
+  "plugins": ["@laxture/opencode-wx-clawbot-notifier"]
 }
 ```
 
@@ -57,7 +57,7 @@ opencode plugin add opencode-wx-clawbot-notifier --global
 {
   "plugins": [
     {
-      "package": "opencode-wx-clawbot-notifier",
+      "package": "@laxture/opencode-wx-clawbot-notifier",
       "options": {
         "timeoutMs": 300000,                    // 超时毫秒数，默认 5 分钟
         "tools": ["question"],                  // 监听的工具名列表
