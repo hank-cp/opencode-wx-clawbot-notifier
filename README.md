@@ -40,8 +40,12 @@ opencode plugin add opencode-wx-clawbot-notifier --global
 1. 在 OpenCode 里运行 `/wx-login`
 2. 插件会在聊天流里直接渲染终端二维码（主方式），同时把二维码图片保存到 `~/.opencode/wx-clawbot/account.json.qrcode.png`（兜底，终端渲染不佳时可打开图片），并打印原始登录链接
 3. 用手机微信扫描终端二维码（或打开 PNG 图片扫码）并确认
-4. 登录成功后，用微信**给 bot 发任意一条消息**（这一步让网关生成会话 `context_token`）
-5. 运行 `/wx-status` 确认能看到收件人
+4. 扫码成功后，插件会提示你用微信**给 bot 发一条消息**（这一步让网关生成会话凭据，bot 才能反向联系你）
+5. 收到你的消息后，插件会自动：
+   - 在会话中显示连接状态（与 `/wx-status` 相同的内容）
+   - 通过 ClawBot 给你发一条微信消息，告诉你已连接成功
+   - 请 AI 用 `question` 工具问你一个问题来测试通知：这次等待超时临时缩短为 **10 秒**，你不回答就能马上在微信收到提醒（测试结束自动恢复默认 5 分钟；若 3 分钟内测试没有开始，也会自动恢复默认）
+6. 如果 3 分钟内没有给 bot 发消息，插件会提示你稍后补发并运行 `/wx-status` 检查
 
 之后插件会在后台长轮询，保持会话凭据新鲜。
 
@@ -58,7 +62,7 @@ opencode plugin add opencode-wx-clawbot-notifier --global
         "timeoutMs": 300000,                    // 超时毫秒数，默认 5 分钟
         "tools": ["question"],                  // 监听的工具名列表
         "accountFile": "~/.opencode/wx-clawbot/account.json",
-        "toUser": "someone@im.wechat",          // 固定收件人；不填则发给所有给 bot 发过消息的用户
+        // "toUser": "o9cq800kvzLUYAs0ALz_IT0McuWc@im.wechat",  // 固定收件人（真实的 @im.wechat id）；不填则发给所有给 bot 发过消息的用户
         "enabled": true
       }
     }
@@ -71,14 +75,14 @@ opencode plugin add opencode-wx-clawbot-notifier --global
 | `timeoutMs` | number | `300000` | 超时阈值（毫秒） |
 | `tools` | string[] | `["question"]` | 监听的工具名；V2 内置人工介入工具是 `question`（V2 已无独立 `confirm` 工具） |
 | `accountFile` | string | `~/.opencode/wx-clawbot/account.json` | 微信凭据存储位置 |
-| `toUser` | string | 无 | 固定收件人；不填则发给所有已知用户 |
+| `toUser` | string | 无 | 固定收件人；不填则发给所有已知用户。**必须填真实的 `xxx@im.wechat` id**：占位 id（如 `someone@im.wechat`）会让网关返回 `ret=-3 invalid arguments`，通知静默发不出去 |
 | `enabled` | boolean | `true` | 关闭插件 |
 
 ## 命令
 
 | 命令 | 作用 |
 | --- | --- |
-| `/wx-login` | 扫码登录微信 ClawBot |
+| `/wx-login` | 扫码登录微信 ClawBot，并引导完成激活、连接通知与超时通知测试 |
 | `/wx-status` | 查看登录状态、收件人、超时阈值、监听工具 |
 
 ## 限制与说明

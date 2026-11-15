@@ -30,6 +30,8 @@ export interface QuestionInfo {
   tool: string
   /** 人类可读的问题摘要（包含选项） */
   summary: string
+  /** 本次计时实际生效的超时阈值（覆盖优先），通知文案应以此为准 */
+  timeoutMs: number
 }
 
 export interface WatcherOptions {
@@ -37,6 +39,12 @@ export interface WatcherOptions {
   tools: ReadonlySet<string>
   onTimeout: (info: QuestionInfo) => void | Promise<void>
   logger?: Logger
+  /**
+   * 一次性超时覆盖：每次监听的工具开始执行时读取一次；
+   * 返回数值则本次计时用该值（如连接测试的 10 秒），否则用 timeoutMs。
+   * 由调用方保证「消费即清除」语义，用后自动恢复默认阈值。
+   */
+  consumeOverride?: () => number | undefined
 }
 
 export function registerQuestionWatcher(host: ToolHookHost, options: WatcherOptions): () => void {
@@ -48,16 +56,22 @@ export function registerQuestionWatcher(host: ToolHookHost, options: WatcherOpti
     const key = `${event.sessionID}:${event.id}`
     if (pending.has(key)) return
     const summary = summarizeInput(event.tool, event.input)
+    const timeoutMs = options.consumeOverride?.() ?? options.timeoutMs
     const timer = setTimeout(() => {
       pending.delete(key)
       void Promise.resolve(
-        options.onTimeout({ sessionID: event.sessionID, tool: event.tool, summary }),
+        options.onTimeout({
+          sessionID: event.sessionID,
+          tool: event.tool,
+          summary,
+          timeoutMs,
+        }),
       ).catch((error) => {
         options.logger?.error(
           `超时通知发送失败：${error instanceof Error ? error.message : String(error)}`,
         )
       })
-    }, options.timeoutMs)
+    }, timeoutMs)
     pending.set(key, timer)
   })
 

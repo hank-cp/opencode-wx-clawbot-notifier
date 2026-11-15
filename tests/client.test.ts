@@ -22,7 +22,8 @@ function installFetchRoutes(routes: (url: string, init?: RequestInit) => unknown
       headers[key] = value
     }
     lastCall = { url: String(url), headers, body: String(init?.body ?? "") }
-    return new Response(JSON.stringify(routes(String(url), init)), { status: 200 })
+    const result = await routes(String(url), init)
+    return new Response(JSON.stringify(result), { status: 200 })
   }) as typeof fetch
 }
 
@@ -54,6 +55,8 @@ const account: StoredAccount = {
   accountId: "bot_1",
   createdAt: "2026-01-01T00:00:00Z",
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function makeClient(file: string, toUser?: string, logger: Logger = silentLogger): WeChatClient {
   const client = new WeChatClient({ accountFile: file, toUser, logger })
@@ -100,6 +103,20 @@ describe("WeChatClient", () => {
     await client.start()
     client.stop()
     await expect(client.sendText("hi")).rejects.toThrow("没有已知收件人")
+  })
+
+  // U8：sendText 指定收件人时只发给该用户（激活用户本人），不看 recipients()
+  test("U8: sendText with explicit recipient sends only to that user", async () => {
+    installFetchMock({ ret: 0, message_id: "m1" })
+    writeFileSync(accountFile, JSON.stringify(account))
+    const client = makeClient(accountFile)
+    await client.start()
+    client.stop()
+    await client.sendText("通知", "someone@im.wechat")
+
+    expect(lastCall?.url).toContain("/ilink/bot/sendmessage")
+    const payload = JSON.parse(lastCall!.body)
+    expect(payload.msg.to_user_id).toBe("someone@im.wechat")
   })
 })
 
@@ -220,5 +237,74 @@ describe("WeChatClient login", () => {
     const client = makeClient(accountFile)
     await expect(client.login(() => {})).rejects.toThrow("缺少 qrcode 字段")
     expect(lastCall?.url).toContain("get_bot_qrcode") // 报错前未发起轮询
+  })
+})
+
+describe("WeChatClient waitForActivation", () => {
+  let dir: string
+  let accountFile: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "wx-clawbot-activation-test-"))
+    accountFile = join(dir, "account.json")
+    lastCall = undefined
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  function installInboundRoutes(inbound: boolean): void {
+    installFetchRoutes(async (url) => {
+      if (url.includes("getupdates")) {
+        // 模拟长轮询的网络延迟：立即返回会让 pollLoop 形成无间隙的
+        // 微任务链，饿死测试里的 setTimeout（如 sleep），导致测试挂起。
+        await sleep(20)
+        return inbound
+          ? {
+              errcode: 0,
+              msgs: [{ from_user_id: "user_a", context_token: "ct_1", message_type: 1 }],
+              get_updates_buf: "b",
+            }
+          : { errcode: 0, msgs: [] }
+      }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+  }
+
+  // U5：无已知用户时挂起等待，收到新入站消息后返回发件人 id
+  test("U5: waits for a new inbound message when no user is known", async () => {
+    installInboundRoutes(true)
+    writeFileSync(accountFile, JSON.stringify(account))
+    const client = makeClient(accountFile)
+    const activation = client.waitForActivation(2_000)
+    await client.start() // 长轮询收到消息 → 唤醒等待者
+    expect(await activation).toBe("user_a")
+    client.stop()
+  })
+
+  // U6：已有已知用户（重登场景）立即返回，复用历史会话
+  test("U6: returns immediately when a user is already known", async () => {
+    installInboundRoutes(true)
+    writeFileSync(accountFile, JSON.stringify(account))
+    const client = makeClient(accountFile)
+    await client.start()
+    await sleep(30) // 让长轮询消费一条入站消息
+    const started = Date.now()
+    const user = await client.waitForActivation(2_000)
+    expect(user).toBe("user_a")
+    expect(Date.now() - started).toBeLessThan(1_000) // 立即返回而非等待
+    client.stop()
+  })
+
+  // U7：限时内没有入站消息 → undefined
+  test("U7: resolves undefined when no message arrives within the timeout", async () => {
+    installInboundRoutes(false)
+    writeFileSync(accountFile, JSON.stringify(account))
+    const client = makeClient(accountFile)
+    await client.start()
+    client.stop() // 停止轮询，保证期间无消息
+    expect(await client.waitForActivation(50)).toBeUndefined()
   })
 })

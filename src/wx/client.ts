@@ -47,6 +47,7 @@ export class WeChatClient {
   private stopped = false
   private pollPromise: Promise<void> | undefined
   private readonly users = new Map<string, UserContext>()
+  private readonly activationWaiters = new Set<(userId: string) => void>()
 
   constructor(private readonly options: ClientOptions) {}
 
@@ -83,6 +84,7 @@ export class WeChatClient {
             contextToken: typeof msg.context_token === "string" ? msg.context_token : "",
             updatedAt: Date.now(),
           })
+          for (const waiter of [...this.activationWaiters]) waiter(msg.from_user_id)
         }
       } catch (error) {
         if (this.stopped) return
@@ -104,12 +106,48 @@ export class WeChatClient {
     return [...this.users.keys()]
   }
 
-  /** 发送文本通知；toUser 未配置时发给所有已知用户 */
-  async sendText(text: string): Promise<void> {
+  /**
+   * 等待用户激活（给 bot 发一条消息，建立可反向通知的会话）：
+   * - 已有已知用户：立即返回（重登场景，历史会话凭据仍有效）
+   * - 否则挂起等待长轮询收到新的私聊消息，返回发件人 id
+   * - 超时（如 3 分钟）未收到：返回 undefined
+   */
+  waitForActivation(timeoutMs: number): Promise<string | undefined> {
+    const existing = this.knownUsers()[0]
+    if (existing !== undefined) return Promise.resolve(existing)
+    return new Promise((resolve) => {
+      const onMessage = (userId: string): void => {
+        clearTimeout(timer)
+        this.activationWaiters.delete(onMessage)
+        resolve(userId)
+      }
+      const timer = setTimeout(() => {
+        this.activationWaiters.delete(onMessage)
+        resolve(undefined)
+      }, timeoutMs)
+      this.activationWaiters.add(onMessage)
+    })
+  }
+
+  /**
+   * 通知实际会发送到的收件人：
+   * - 配置了 toUser：只发给该固定收件人
+   * - 未配置：发给所有给 bot 发过消息的用户
+   * 状态展示必须用这个结果，否则会出现「显示 A、实际发 B」的误导。
+   */
+  recipients(): string[] {
+    return this.options.toUser ? [this.options.toUser] : this.knownUsers()
+  }
+
+  /**
+   * 发送文本通知；to 指定时只发给该用户（如刚激活的用户本人），
+   * 未指定时按 recipients()（toUser 配置优先，否则所有已知用户）。
+   */
+  async sendText(text: string, to?: string): Promise<void> {
     if (!this.account) {
       throw new TransportError("未登录微信（请先运行 /wx-login），通知无法发送")
     }
-    const targets = this.options.toUser ? [this.options.toUser] : this.knownUsers()
+    const targets = to !== undefined ? [to] : this.recipients()
     if (targets.length === 0) {
       throw new TransportError(
         "没有已知收件人：请先用微信给 bot 发一条消息，插件才能反向通知你",

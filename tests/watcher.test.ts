@@ -143,4 +143,41 @@ describe("registerQuestionWatcher", () => {
     await sleep(80)
     expect(timeouts.map((t) => t.sessionID)).toEqual(["ses_b"])
   })
+
+  // U9：一次性超时覆盖——首个 question 用覆盖值（30ms），消费后自动恢复默认
+  test("U9: consumes a one-shot timeout override then falls back to default", async () => {
+    let overrideCalls = 0
+    disposers.push(
+      registerQuestionWatcher(host, {
+        timeoutMs: 60_000,
+        tools: new Set(["question"]),
+        onTimeout: (info) => timeouts.push(info),
+        logger: silentLogger,
+        consumeOverride: () => (overrideCalls++ === 0 ? 30 : undefined),
+      }),
+    )
+    host.fire("execute.before", makeEvent({ id: "call_1" }))
+    await sleep(80)
+    expect(timeouts).toHaveLength(1) // 30ms 覆盖生效
+    expect(timeouts[0].timeoutMs).toBe(30) // 通知文案用实际生效阈值
+    host.fire("execute.before", makeEvent({ id: "call_2" }))
+    await sleep(80)
+    expect(timeouts).toHaveLength(1) // 覆盖已消费，第二次回到 60s 默认不触发
+  })
+
+  // U10：未武装覆盖时使用默认阈值（回归）
+  test("U10: uses default timeout when no override is armed", async () => {
+    disposers.push(
+      registerQuestionWatcher(host, {
+        timeoutMs: 30,
+        tools: new Set(["question"]),
+        onTimeout: (info) => timeouts.push(info),
+        logger: silentLogger,
+        consumeOverride: () => undefined,
+      }),
+    )
+    host.fire("execute.before", makeEvent())
+    await sleep(80)
+    expect(timeouts).toHaveLength(1)
+  })
 })
