@@ -38,8 +38,8 @@ opencode plugin add opencode-wx-clawbot-notifier --global
 微信 bot 只能给**主动联系过它**的用户发消息，所以需要先扫码登录：
 
 1. 在 OpenCode 里运行 `/wx-login`
-2. 插件会在 `~/.opencode/wx-clawbot/account.json.qrcode.png` 生成登录二维码
-3. 用手机微信（装有 ClawBot 机器人的环境）扫码并确认
+2. 插件会在聊天流里直接渲染终端二维码（主方式），同时把二维码图片保存到 `~/.opencode/wx-clawbot/account.json.qrcode.png`（兜底，终端渲染不佳时可打开图片），并打印原始登录链接
+3. 用手机微信扫描终端二维码（或打开 PNG 图片扫码）并确认
 4. 登录成功后，用微信**给 bot 发任意一条消息**（这一步让网关生成会话 `context_token`）
 5. 运行 `/wx-status` 确认能看到收件人
 
@@ -84,6 +84,7 @@ opencode plugin add opencode-wx-clawbot-notifier --global
 ## 限制与说明
 
 - **V2 没有内置 `confirm` 工具**：OpenCode V2 的内置人工介入工具只有 `question`（`confirm` 是 V1 的产物）。如果你的 agent 自定义了 confirm 类工具，把名字加进 `tools` 配置即可。
+- **登录二维码会以会话消息呈现**：`/wx-login` 生成的二维码以用户消息形式写入当前会话（完整显示），会话 agent 会看到该消息并可能回应；状态变化则以一行通知呈现。
 - **必须先有会话**：微信策略要求用户先给 bot 发过消息，bot 才能反向发消息。
 - **只支持私聊**：目前只向私聊用户发送，群聊消息仅用于更新凭据。
 - **通知是单向的**：本插件只负责「催你回终端」，不支持在微信里回答问题（那需要完整的双向桥接，见参考项目）。

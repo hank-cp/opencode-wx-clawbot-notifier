@@ -25,7 +25,8 @@ export interface Account {
 
 export interface QrTicket {
   qrcode: string
-  imageBase64?: string
+  /** 网关返回的 liteapp 登录链接（纯文本 URL），用于生成二维码供扫码 */
+  qrUrl?: string
 }
 
 export type QrStatus =
@@ -93,14 +94,21 @@ async function post<T>(
 // ── 扫码登录 ─────────────────────────────────────────────────────────
 
 export async function fetchQr(): Promise<QrTicket> {
-  const r = await post<{ qrcode: string; qrcode_img_content?: string }>(
+  const r = await post<{ qrcode?: unknown; qrcode_img_content?: unknown }>(
     BASE,
     `ilink/bot/get_bot_qrcode?bot_type=${BOT_TYPE}`,
     { local_token_list: [] },
     undefined,
     10_000,
   )
-  return { qrcode: r.qrcode, imageBase64: r.qrcode_img_content }
+  if (typeof r.qrcode !== "string" || r.qrcode.length === 0) {
+    throw new TransportError("登录二维码响应缺少 qrcode 字段")
+  }
+  const qrUrl =
+    typeof r.qrcode_img_content === "string" && r.qrcode_img_content.startsWith("http")
+      ? r.qrcode_img_content
+      : undefined
+  return { qrcode: r.qrcode, qrUrl }
 }
 
 export async function pollQr(qrcode: string, timeoutMs = LONG_POLL_MS): Promise<QrStatusResult> {

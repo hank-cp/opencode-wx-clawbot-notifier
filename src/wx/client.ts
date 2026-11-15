@@ -1,5 +1,6 @@
 import { dirname } from "node:path"
-import { writeFileSync } from "node:fs"
+import { mkdirSync, writeFileSync } from "node:fs"
+import QRCode from "qrcode"
 import {
   fetchQr,
   getUpdates,
@@ -18,6 +19,16 @@ export interface ClientOptions {
 }
 
 export type LoginResult = "confirmed" | "expired"
+
+/**
+ * 登录流程的进度事件：
+ * - `qr`：需要以完整多行文本呈现给用户扫码的内容（终端二维码字符画）
+ * - `notice`：单行状态通知（获取二维码、验证码提示、成功/失败等）
+ */
+export interface LoginProgress {
+  kind: "qr" | "notice"
+  text: string
+}
 
 interface UserContext {
   contextToken: string
@@ -112,25 +123,43 @@ export class WeChatClient {
   }
 
   /**
-   * 扫码登录流程：拉取二维码 → 保存为 PNG → 轮询扫码状态 → 保存凭据。
-   * 由 /wx-login 命令调用。
+   * 扫码登录流程：拉取二维码 → 呈现二维码（终端渲染为主，PNG 落盘与 URL 原文兜底）
+   * → 轮询扫码状态 → 保存凭据。
+   * 由 /wx-login 命令调用；进度经结构化回调上报（qr=需完整呈现，notice=一行通知）。
    */
-  async login(onProgress: (message: string) => void): Promise<LoginResult> {
-    onProgress("正在获取登录二维码…")
+  async login(onProgress: (progress: LoginProgress) => void): Promise<LoginResult> {
+    onProgress({ kind: "notice", text: "正在获取登录二维码…" })
     const ticket = await fetchQr()
-    let qrPath: string | undefined
-    if (ticket.imageBase64) {
+
+    if (!ticket.qrUrl) {
+      onProgress({ kind: "notice", text: "网关未返回二维码链接，请稍后重新运行 /wx-login。" })
+    } else {
+      const url = ticket.qrUrl
+      let qrPath: string | undefined
       try {
+        mkdirSync(dirname(this.options.accountFile), { recursive: true })
         qrPath = `${this.options.accountFile}.qrcode.png`
-        writeFileSync(qrPath, Buffer.from(ticket.imageBase64, "base64"))
+        writeFileSync(qrPath, await QRCode.toBuffer(url, { type: "png" }))
       } catch (error) {
         this.options.logger.warn(
           `保存二维码图片失败：${error instanceof Error ? error.message : String(error)}`,
         )
         qrPath = undefined
       }
+      let terminalQr: string | undefined
+      try {
+        terminalQr = await QRCode.toString(url, { type: "utf8" })
+      } catch (error) {
+        this.options.logger.warn(
+          `生成终端二维码失败：${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+      const lines = ["请用微信扫描下方二维码登录："]
+      if (terminalQr) lines.push(terminalQr)
+      if (qrPath) lines.push(`也可打开图片扫码：${qrPath}`)
+      lines.push(`二维码链接：${url}`)
+      onProgress({ kind: "qr", text: lines.join("\n") })
     }
-    onProgress(qrPath ? `二维码已保存到 ${qrPath}，请用微信扫码。` : "请用微信扫码登录。")
 
     const deadline = Date.now() + 8 * 60_000
     while (Date.now() < deadline && !this.stopped) {
@@ -148,14 +177,14 @@ export class WeChatClient {
             createdAt: new Date().toISOString(),
           }
           saveAccount(this.options.accountFile, this.account)
-          onProgress("登录成功，正在启动消息轮询…")
+          onProgress({ kind: "notice", text: "登录成功，正在启动消息轮询…" })
           this.pollPromise = this.pollLoop()
           return "confirmed"
         }
         case "expired":
           return "expired"
         case "need_verifycode":
-          onProgress("登录需要验证码，请按微信提示完成验证后继续等待…")
+          onProgress({ kind: "notice", text: "登录需要验证码，请按微信提示完成验证后继续等待…" })
           break
         default:
           // wait / scaned / binded_redirect / scaned_but_redirect / verify_code_blocked
