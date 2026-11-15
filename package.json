@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
+  "repository": "https://github.com/hank-cp/opencode-wx-clawbot-notifier",
   "description": "OpenCode plugin: send a WeChat (ClawBot) notification when a question/confirm tool waits too long for a human answer",
   "keywords": [
     "opencode",
@@ -25,7 +26,8 @@
     }
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "files": [
     "dist",

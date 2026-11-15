@@ -1,0 +1,59 @@
+name: Publish to npm
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    env:
+      NPM: npx --yes --package npm@^11.5.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: '1.4.4'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+
+      - name: Check npm version
+        id: package
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+              echo "published=true" >> "$GITHUB_OUTPUT"
+              echo "${NAME}@${VERSION} is already published."
+          else
+              echo "published=false" >> "$GITHUB_OUTPUT"
+              echo "${NAME}@${VERSION} is not published yet."
+          fi
+
+      - name: Check npm registry
+        run: |
+          $NPM npm --version
+          $NPM npm ping
+
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun test
+      # Trusted publishing (OIDC): npm exchanges the GitHub OIDC token for a
+      # short-lived publish token. No npm token secret is involved — a stale or
+      # expired token is the usual cause of `E404` on publish.
+      # npmjs.com → opencode-wx-clawbot-notifier → Settings → Trusted Publisher:
+      #   org/user `hank-cp`, repo `opencode-wx-clawbot-notifier`, workflow filename `publish.yml`,
+      #   and allow `npm publish`. A new trusted publisher config must complete its
+      #   first successful publish within 2 days, otherwise it expires.
+      - name: Publish to npm
+        if: steps.package.outputs.published != 'true'
+        run: $NPM npm publish --access public --provenance
