@@ -1,9 +1,6 @@
 {
-  "name": "opencode-wx-clawbot-notifier",
+  "name": "@laxture/opencode-wx-clawbot-notifier",
   "version": "0.1.0",
-  "license": "MIT",
-  "type": "module",
-  "repository": "https://github.com/hank-cp/opencode-wx-clawbot-notifier",
   "description": "OpenCode plugin: send a WeChat (ClawBot) notification when a question/confirm tool waits too long for a human answer",
   "keywords": [
     "opencode",
@@ -13,8 +10,17 @@
     "notification",
     "question"
   ],
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "homepage": "https://github.com/hank-cp/opencode-wx-clawbot-notifier#readme",
+  "bugs": {
+    "url": "https://github.com/hank-cp/opencode-wx-clawbot-notifier/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hank-cp/opencode-wx-clawbot-notifier.git"
+  },
+  "license": "MIT",
+  "author": "hank_cp",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -25,9 +31,11 @@
       "import": "./dist/index.js"
     }
   },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
   },
   "files": [
     "dist",
@@ -40,8 +48,8 @@
     "typecheck": "tsc --noEmit",
     "format": "bunx prettier --write src tests scripts"
   },
-  "peerDependencies": {
-    "@opencode/plugin": "^2.1.1"
+  "dependencies": {
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@opencode/plugin": "^2.1.1",
@@ -49,7 +57,11 @@
     "@types/qrcode": "^1.5.6",
     "typescript": "^5.5.0"
   },
-  "dependencies": {
-    "qrcode": "^1.5.4"
+  "peerDependencies": {
+    "@opencode/plugin": "^2.1.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }
