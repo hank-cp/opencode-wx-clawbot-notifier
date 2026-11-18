@@ -51,6 +51,13 @@ export interface QrStatusResult {
 export class TransportError extends Error {}
 /** token 过期（errcode -14），需要重新扫码登录 */
 export class StaleTokenError extends TransportError {}
+/**
+ * Session context (context_token) is missing or expired (sendmessage ret=-2).
+ * The gateway only issues a new token with inbound user messages and exposes
+ * no endpoint to renew it proactively; recovery requires the user to send
+ * the bot a message in WeChat.
+ */
+export class StaleContextTokenError extends TransportError {}
 
 export function randomWechatUin(): string {
   return Buffer.from(String(randomBytes(4).readUInt32BE(0)), "utf-8").toString("base64")
@@ -197,6 +204,12 @@ export async function sendText(
     account.token,
   )
   if (r.errcode === -14) throw new StaleTokenError("bot token expired (errcode -14)")
+  if (r.ret === -2) {
+    const detail = r.errmsg ? `sendmessage ret=-2 ${r.errmsg}` : "sendmessage ret=-2"
+    throw new StaleContextTokenError(
+      `会话凭据已过期（${detail}）：请在微信上给 bot 发一条消息刷新凭据，然后让 AI 重新发送通知`,
+    )
+  }
   if (typeof r.ret === "number" && r.ret !== 0) {
     throw new TransportError(`sendmessage ret=${r.ret} ${r.errmsg ?? ""}`)
   }

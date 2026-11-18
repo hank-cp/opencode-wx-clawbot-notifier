@@ -3,6 +3,7 @@ import {
   getUpdates,
   pollQr,
   sendText,
+  StaleContextTokenError,
   StaleTokenError,
   TransportError,
   type Account,
@@ -82,10 +83,41 @@ describe("sendText", () => {
     await expect(sendText(account, "u", "x", "")).rejects.toThrow(TransportError)
   })
 
+  // Regression: non -2 ret codes stay plain TransportError (e.g. ret=-3)
+  test("keeps non -2 ret codes as plain TransportError (e.g. ret=-3)", async () => {
+    installFetchMock()
+    nextResponse = { body: { ret: -3, errmsg: "invalid arguments" } }
+    const error = await sendText(account, "u", "x", "").catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(TransportError)
+    expect(error).not.toBeInstanceOf(StaleContextTokenError)
+    expect((error as Error).message).toBe("sendmessage ret=-3 invalid arguments")
+  })
+
   test("throws StaleTokenError on errcode -14", async () => {
     installFetchMock()
     nextResponse = { body: { errcode: -14 } }
     await expect(sendText(account, "u", "x", "")).rejects.toThrow(StaleTokenError)
+  })
+
+  // Regression: after a long quiet period the context_token expires and the
+  // gateway answers ret=-2 prepare failed
+  test("throws StaleContextTokenError with actionable message on ret=-2 prepare failed", async () => {
+    installFetchMock()
+    nextResponse = { body: { ret: -2, errmsg: "prepare failed" } }
+    const error = await sendText(account, "u", "x", "stale_ctx").catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(StaleContextTokenError)
+    expect(error).toBeInstanceOf(TransportError) // existing catches/classification unaffected
+    expect((error as Error).message).toContain("prepare failed")
+    expect((error as Error).message).toContain("给 bot 发一条消息")
+  })
+
+  // Regression edge: the gateway may return a bare {"ret":-2} without errmsg
+  test("classifies bare ret=-2 without errmsg as stale context", async () => {
+    installFetchMock()
+    nextResponse = { body: { ret: -2 } }
+    const error = await sendText(account, "u", "x", "").catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(StaleContextTokenError)
+    expect((error as Error).message).toContain("给 bot 发一条消息")
   })
 })
 
