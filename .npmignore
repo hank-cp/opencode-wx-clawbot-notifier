@@ -1,7 +1,0 @@
-src/
-tests/
-scripts/
-tsconfig.json
-.gitignore
-.vibe-pm/
-node_modules/

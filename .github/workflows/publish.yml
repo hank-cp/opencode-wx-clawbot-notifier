@@ -7,6 +7,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish to npm
@@ -31,13 +35,23 @@ jobs:
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-          if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+          if $NPM npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
               echo "published=true" >> "$GITHUB_OUTPUT"
               echo "${NAME}@${VERSION} is already published."
           else
               echo "published=false" >> "$GITHUB_OUTPUT"
               echo "${NAME}@${VERSION} is not published yet."
           fi
+
+      - name: Verify tag matches package version
+        run: |
+          if [ "v${VERSION}" != "${GITHUB_REF_NAME}" ]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match package version ${VERSION}."
+              exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} matches package version ${VERSION}."
+        env:
+          VERSION: ${{ steps.package.outputs.version }}
 
       - name: Check npm registry
         run: |
